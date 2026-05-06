@@ -2,29 +2,23 @@ package com.finance.personal_finance_manager.service;
 
 import com.finance.personal_finance_manager.model.PasswordResetToken;
 import com.finance.personal_finance_manager.model.User;
-import com.finance.personal_finance_manager.model.UserQrCode;
 import com.finance.personal_finance_manager.repository.PasswordResetTokenRepository;
-import com.finance.personal_finance_manager.repository.UserQrCodeRepository;
 import com.finance.personal_finance_manager.repository.UserRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
-import com.twilio.Twilio;
-import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
-import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -99,23 +93,6 @@ public class UserService {
         return Optional.empty();
     }
 
-    // Xác thực Facebook (giả lập)
-    public Optional<User> authenticateFacebook(String accessToken) {
-        String email = "fb_" + UUID.randomUUID().toString() + "@example.com";
-        String username = email;
-        String randomPassword = UUID.randomUUID().toString();
-        User user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            user = new User();
-            user.setUsername(username);
-            user.setPassword(passwordEncoder.encode(randomPassword));
-            user.setEmail(email);
-            user.setFullName("Facebook User");
-            user = userRepository.save(user);
-        }
-        return Optional.of(user);
-    }
-
     public boolean changePassword(Long userId, String oldPassword, String newPassword) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isPresent()) {
@@ -128,174 +105,6 @@ public class UserService {
         }
         return false;
     }
-
-    // ==================== OTP LOGIN ====================
-    @Value("${twilio.account.sid:}")
-    private String twilioAccountSid;
-
-    @Value("${twilio.auth.token:}")
-    private String twilioAuthToken;
-
-    @Value("${twilio.phone.number:}")
-    private String twilioPhoneNumber;
-
-    private Map<String, OtpData> otpStore = new ConcurrentHashMap<>();
-
-    private static class OtpData {
-        String otp;
-        LocalDateTime expiry;
-        OtpData(String otp) {
-            this.otp = otp;
-            this.expiry = LocalDateTime.now().plusMinutes(5);
-        }
-        boolean isValid() {
-            return LocalDateTime.now().isBefore(expiry);
-        }
-    }
-
-    @PostConstruct
-    public void initTwilio() {
-        if (twilioAccountSid != null && !twilioAccountSid.isEmpty()) {
-            Twilio.init(twilioAccountSid, twilioAuthToken);
-            System.out.println("Twilio initialized for OTP");
-        } else {
-            System.out.println("Twilio not configured, OTP will be printed to console");
-        }
-    }
-
-    public String generateAndSendOtp(String phoneNumber) {
-        String otp = String.format("%06d", new Random().nextInt(999999));
-        otpStore.put(phoneNumber, new OtpData(otp));
-        if (twilioAccountSid != null && !twilioAccountSid.isEmpty()) {
-            try {
-                Message.creator(
-                        new PhoneNumber(phoneNumber),
-                        new PhoneNumber(twilioPhoneNumber),
-                        "Mã OTP đăng nhập Finance Manager: " + otp
-                ).create();
-                System.out.println("SMS sent to " + phoneNumber);
-            } catch (Exception e) {
-                System.err.println("Failed to send SMS: " + e.getMessage());
-                System.out.println("OTP for " + phoneNumber + " is " + otp);
-            }
-        } else {
-            System.out.println("OTP for " + phoneNumber + " is " + otp);
-        }
-        return otp;
-    }
-
-    public Optional<User> verifyOtpAndCreateUser(String phoneNumber, String otp) {
-        OtpData otpData = otpStore.get(phoneNumber);
-        if (otpData != null && otpData.isValid() && otpData.otp.equals(otp)) {
-            String username = phoneNumber;
-            String randomPassword = UUID.randomUUID().toString();
-            User user = userRepository.findByUsername(username).orElse(null);
-            if (user == null) {
-                user = new User();
-                user.setUsername(username);
-                user.setPassword(passwordEncoder.encode(randomPassword));
-                user.setFullName("User " + phoneNumber);
-                user = userRepository.save(user);
-            }
-            otpStore.remove(phoneNumber);
-            return Optional.of(user);
-        }
-        return Optional.empty();
-    }
-
-    private static class QrSession {
-        String token;
-        LocalDateTime expiry;
-        boolean used;
-        User user;
-        QrSession(String token) {
-            this.token = token;
-            this.expiry = LocalDateTime.now().plusMinutes(5);
-            this.used = false;
-            this.user = null;
-        }
-        boolean isValid() { return LocalDateTime.now().isBefore(expiry); }
-    }
-
-    private final Map<String, QrSession> qrSessions = new ConcurrentHashMap<>();
-
-    public String generateQrToken() {
-        String token = UUID.randomUUID().toString();
-        qrSessions.put(token, new QrSession(token));
-        return token;
-    }
-
-    // Dành cho điện thoại: xác thực token và tạo user
-    public Optional<User> verifyQrToken(String token) {
-        QrSession session = qrSessions.get(token);
-        if (session != null && session.isValid() && !session.used) {
-            String username = "qr_" + UUID.randomUUID().toString().substring(0, 8);
-            String randomPassword = UUID.randomUUID().toString();
-            User user = new User();
-            user.setUsername(username);
-            user.setPassword(passwordEncoder.encode(randomPassword));
-            user.setFullName("User from QR");
-            user = userRepository.save(user);
-            session.user = user;
-            session.used = true;
-            return Optional.of(user);
-        }
-        return Optional.empty();
-    }
-
-    // Dành cho polling: kiểm tra trạng thái, trả về user nếu đã xác thực
-    public Optional<User> getQrTokenStatus(String token) {
-        QrSession session = qrSessions.get(token);
-        if (session != null && session.isValid() && session.used) {
-            return Optional.of(session.user);
-        }
-        return Optional.empty();
-    }
-
-    @Autowired
-    private UserQrCodeRepository userQrCodeRepository;
-
-    // Lưu trữ session tạm cho QR login (token -> userId)
-    private final Map<String, Long> qrLoginSessions = new ConcurrentHashMap<>();
-    private final Map<String, String> qrTokenToSessionToken = new ConcurrentHashMap<>();
-
-
-    // Tạo QR code cố định cho user (nếu chưa có)
-    public String generateUserQrCode(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
-        Optional<UserQrCode> existing = userQrCodeRepository.findByUser(user);
-        if (existing.isPresent()) {
-            return existing.get().getQrToken();
-        }
-        String token = UUID.randomUUID().toString();
-        UserQrCode qrCode = new UserQrCode(null, user, token, LocalDateTime.now());
-        userQrCodeRepository.save(qrCode);
-        return token;
-    }
-
-    // Xác nhận đăng nhập từ điện thoại
-    public boolean confirmQrLogin(String qrToken, Long userId) {
-        UserQrCode qrCode = userQrCodeRepository.findByQrToken(qrToken).orElse(null);
-        if (qrCode == null || !qrCode.getUser().getUserId().equals(userId)) {
-            return false;
-        }
-        String sessionToken = UUID.randomUUID().toString();
-        qrLoginSessions.put(sessionToken, userId);
-        qrTokenToSessionToken.put(qrToken, sessionToken);
-        return true;
-    }
-
-    // Lấy user từ session token (polling)
-    public Optional<User> getQrLoginUser(String qrToken) {
-        String sessionToken = qrTokenToSessionToken.remove(qrToken);
-        if (sessionToken == null) return Optional.empty();
-        Long userId = qrLoginSessions.remove(sessionToken);
-        if (userId != null) {
-            return userRepository.findById(userId);
-        }
-        return Optional.empty();
-    }
-
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
     }
@@ -304,7 +113,7 @@ public class UserService {
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Autowired
-    private JavaMailSender mailSender; // Có thể bỏ nếu không dùng email thật
+    private JavaMailSender mailSender;
 
     // Phương thức tạo token reset password
     @Transactional
@@ -346,39 +155,5 @@ public class UserService {
         userRepository.save(user);
         passwordResetTokenRepository.delete(tokenOpt.get());
         return true;
-    }
-
-    public Optional<User> getUserByQrToken(String token) {
-        QrSession session = qrSessions.get(token);
-        if (session != null && session.used) {
-            return Optional.ofNullable(session.user);
-        }
-        return Optional.empty();
-    }
-
-    public void associateQrTokenWithUser(String token, User user) {
-        QrSession session = qrSessions.get(token);
-        if (session != null && !session.used) {
-            session.user = user;
-            session.used = true;
-        }
-    }
-
-    public Optional<User> registerWithQrToken(String token, String email, String password) {
-        QrSession session = qrSessions.get(token);
-        if (session == null || !session.isValid() || session.used) {
-            return Optional.empty();
-        }
-        // Tạo user mới
-        User user = new User();
-        user.setUsername(email); // hoặc tạo username riêng, ví dụ email
-        user.setEmail(email);
-        user.setPassword(passwordEncoder.encode(password));
-        user.setFullName("");
-        user = userRepository.save(user);
-        // Đánh dấu token đã dùng và gán user vào session
-        session.user = user;
-        session.used = true;
-        return Optional.of(user);
     }
 }

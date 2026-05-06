@@ -5,7 +5,6 @@ import com.finance.personal_finance_manager.repository.UserRepository;
 import com.finance.personal_finance_manager.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -74,52 +73,6 @@ public class UserController {
         }
     }
 
-    @PostMapping("/facebook-login")
-    public ResponseEntity<?> facebookLogin(@RequestBody Map<String, String> payload) {
-        String token = payload.get("token");
-        Optional<User> userOpt = userService.authenticateFacebook(token);
-        if (userOpt.isPresent()) {
-            return ResponseEntity.ok(userOpt.get());
-        } else {
-            return ResponseEntity.status(401).body("Xác thực Facebook thất bại");
-        }
-    }
-
-    @PostMapping("/send-otp")
-    public ResponseEntity<String> sendOtp(@RequestBody Map<String, String> payload) {
-        String phoneNumber = payload.get("phoneNumber");
-        String otp = userService.generateAndSendOtp(phoneNumber);
-        return ResponseEntity.ok("OTP đã được gửi (giả lập: " + otp + ")");
-    }
-
-    @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifyOtp(@RequestBody Map<String, String> payload) {
-        String phoneNumber = payload.get("phoneNumber");
-        String otp = payload.get("otp");
-        Optional<User> userOpt = userService.verifyOtpAndCreateUser(phoneNumber, otp);
-        if (userOpt.isPresent()) {
-            return ResponseEntity.ok(userOpt.get());
-        } else {
-            return ResponseEntity.status(401).body("OTP không hợp lệ");
-        }
-    }
-
-    @GetMapping("/qr-login/generate")
-    public ResponseEntity<String> generateQrToken() {
-        String token = userService.generateQrToken();
-        return ResponseEntity.ok(token);
-    }
-
-    @GetMapping("/qr-login/verify")
-    public ResponseEntity<?> verifyQrToken(@RequestParam String token) {
-        Optional<User> userOpt = userService.verifyQrToken(token);
-        if (userOpt.isPresent()) {
-            return ResponseEntity.ok(userOpt.get());
-        } else {
-            return ResponseEntity.status(401).body("Token không hợp lệ hoặc đã hết hạn");
-        }
-    }
-
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> payload) {
         Long userId = Long.parseLong(payload.get("userId"));
@@ -131,47 +84,6 @@ public class UserController {
         } else {
             return ResponseEntity.status(400).body("Mật khẩu cũ không đúng hoặc user không tồn tại");
         }
-    }
-
-    // Lấy QR token cố định của user
-    @GetMapping("/qr-code")
-    public ResponseEntity<String> getUserQrCode(@RequestParam Long userId) {
-        String qrToken = userService.generateUserQrCode(userId);
-        return ResponseEntity.ok(qrToken);
-    }
-
-    // Xác nhận đăng nhập từ điện thoại (quét QR)
-    @PostMapping("/qr-login/confirm")
-    public ResponseEntity<?> confirmQrLogin(@RequestBody Map<String, String> payload) {
-        String qrToken = payload.get("qrToken");
-        Long userId = Long.parseLong(payload.get("userId")); // Lấy từ request (sẽ có từ frontend)
-        boolean confirmed = userService.confirmQrLogin(qrToken, userId);
-        if (confirmed) {
-            return ResponseEntity.ok("Xác nhận thành công");
-        } else {
-            return ResponseEntity.status(401).body("Xác nhận thất bại");
-        }
-    }
-
-    // Polling kiểm tra trạng thái (dùng session token)
-    @GetMapping("/qr-login/status")
-    public ResponseEntity<?> getQrLoginStatus(@RequestParam String token) {
-        Optional<User> userOpt = userService.getQrLoginUser(token);
-        if (userOpt.isPresent()) {
-            return ResponseEntity.ok(userOpt.get());
-        } else {
-            return ResponseEntity.status(404).body("Chưa có đăng nhập");
-        }
-    }
-
-    @GetMapping("/qr-code-by-email")
-    public ResponseEntity<?> getQrCodeByEmail(@RequestParam String email) {
-        Optional<User> userOpt = userService.findByEmail(email);
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.status(404).body("Email không tồn tại");
-        }
-        String qrToken = userService.generateUserQrCode(userOpt.get().getUserId());
-        return ResponseEntity.ok(qrToken);
     }
 
     @PostMapping("/forgot-password")
@@ -192,25 +104,6 @@ public class UserController {
         boolean success = userService.resetPassword(token, newPassword);
         if (success) {
             return ResponseEntity.ok("Đặt lại mật khẩu thành công");
-        } else {
-            return ResponseEntity.badRequest().body("Token không hợp lệ hoặc đã hết hạn");
-        }
-    }
-
-    @PostMapping("/qr-register")
-    public ResponseEntity<?> qrRegister(@RequestBody Map<String, String> payload) {
-        String token = payload.get("token");
-        String email = payload.get("email");
-        String password = payload.get("password");
-
-        // Kiểm tra email đã tồn tại
-        if (userRepository.findByEmail(email).isPresent()) {
-            return ResponseEntity.badRequest().body("Email đã tồn tại");
-        }
-
-        Optional<User> userOpt = userService.registerWithQrToken(token, email, password);
-        if (userOpt.isPresent()) {
-            return ResponseEntity.ok(userOpt.get());
         } else {
             return ResponseEntity.badRequest().body("Token không hợp lệ hoặc đã hết hạn");
         }

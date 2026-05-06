@@ -5,7 +5,7 @@ import lombok.*;
 
 @Entity
 @Table(name = "users")
-@Data // Tự tạo Getter, Setter, ToString (nhờ Lombok)
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {

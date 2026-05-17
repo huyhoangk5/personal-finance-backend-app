@@ -164,17 +164,21 @@ public class DashboardService {
         }
         // Đổ dữ liệu thu
         for (Object[] row : incomes) {
-            LocalDate date = (LocalDate) row[0];
+            java.sql.Date sqlDate = (java.sql.Date) row[0];
             Double amount = (Double) row[1];
-            String dateStr = date.toString();
-            dailyMap.get(dateStr).put("income", amount);
+            String dateStr = sqlDate.toLocalDate().toString();
+            if (dailyMap.containsKey(dateStr)) {
+                dailyMap.get(dateStr).put("income", amount);
+            }
         }
         // Đổ dữ liệu chi
         for (Object[] row : expenses) {
-            LocalDate date = (LocalDate) row[0];
+            java.sql.Date sqlDate = (java.sql.Date) row[0];
             Double amount = (Double) row[1];
-            String dateStr = date.toString();
-            dailyMap.get(dateStr).put("expense", amount);
+            String dateStr = sqlDate.toLocalDate().toString();
+            if (dailyMap.containsKey(dateStr)) {
+                dailyMap.get(dateStr).put("expense", amount);
+            }
         }
         return dailyMap;
     }

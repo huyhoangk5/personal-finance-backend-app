@@ -52,10 +52,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             "GROUP BY c.categoryName")
     List<Object[]> sumIncomeByCategoryAndUserAndMonth(@Param("userId") Long userId, @Param("month") String month);
 
-    @Query("SELECT t.date, SUM(t.amount) FROM Transaction t " +
+    @Query("SELECT CAST(t.date AS date), SUM(t.amount) FROM Transaction t " +
             "WHERE t.user.userId = :userId AND t.type = :type " +
             "AND TO_CHAR(t.date, 'YYYY-MM') = :month " +
-            "GROUP BY t.date")
+            "GROUP BY CAST(t.date AS date)")
     List<Object[]> sumAmountByDayAndType(@Param("userId") Long userId,
                                          @Param("type") Category.TransactionType type,
                                          @Param("month") String month);

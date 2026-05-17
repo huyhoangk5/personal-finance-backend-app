@@ -2,7 +2,7 @@ package com.finance.personal_finance_manager.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "transactions")
@@ -15,7 +15,7 @@ public class Transaction {
     private Long transactionId;
 
     private Double amount;
-    private LocalDate date;
+    private LocalDateTime date;
     private String note;
 
     @Enumerated(EnumType.STRING)

@@ -3,6 +3,7 @@ package com.finance.personal_finance_manager.controller;
 import com.finance.personal_finance_manager.model.User;
 import com.finance.personal_finance_manager.repository.UserRepository;
 import com.finance.personal_finance_manager.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +19,10 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestBody User user) {
+    public ResponseEntity<String> register(@Valid @RequestBody User user) {
+        if (user.getPassword().length() < 6) {
+            return ResponseEntity.badRequest().body("Mật khẩu phải ít nhất 6 ký tự");
+        }
         String result = userService.registerUser(user);
         if (result.contains("Lỗi")) {
             return ResponseEntity.badRequest().body(result);
@@ -75,9 +79,16 @@ public class UserController {
 
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> payload) {
-        Long userId = Long.parseLong(payload.get("userId"));
+        String userIdStr = payload.get("userId");
         String oldPassword = payload.get("oldPassword");
         String newPassword = payload.get("newPassword");
+        if (userIdStr == null || oldPassword == null || newPassword == null) {
+            return ResponseEntity.badRequest().body("Thiếu thông tin bắt buộc");
+        }
+        if (newPassword.length() < 6) {
+            return ResponseEntity.badRequest().body("Mật khẩu mới phải ít nhất 6 ký tự");
+        }
+        Long userId = Long.parseLong(userIdStr);
         boolean changed = userService.changePassword(userId, oldPassword, newPassword);
         if (changed) {
             return ResponseEntity.ok("Đổi mật khẩu thành công");
@@ -89,18 +100,27 @@ public class UserController {
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> payload) {
         String email = payload.get("email");
+        if (email == null || email.isBlank() || !email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            return ResponseEntity.badRequest().body("Email không hợp lệ");
+        }
         String token = userService.createPasswordResetToken(email);
         if (token == null) {
-            return ResponseEntity.badRequest().body("Email không tồn tại");
+            return ResponseEntity.badRequest().body("Email không tồn tại trong hệ thống");
         }
         userService.sendPasswordResetEmail(email, token);
-        return ResponseEntity.ok("Email đặt lại mật khẩu đã được gửi (kiểm tra console)");
+        return ResponseEntity.ok("Email đặt lại mật khẩu đã được gửi");
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> payload) {
         String token = payload.get("token");
         String newPassword = payload.get("newPassword");
+        if (token == null || token.isBlank()) {
+            return ResponseEntity.badRequest().body("Token không hợp lệ");
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            return ResponseEntity.badRequest().body("Mật khẩu mới phải ít nhất 6 ký tự");
+        }
         boolean success = userService.resetPassword(token, newPassword);
         if (success) {
             return ResponseEntity.ok("Đặt lại mật khẩu thành công");

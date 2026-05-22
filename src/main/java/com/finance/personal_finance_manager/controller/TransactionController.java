@@ -8,6 +8,7 @@ import com.finance.personal_finance_manager.service.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,10 @@ public class TransactionController {
 
     // POST http://localhost:8080/api/transactions
     @PostMapping
-    public ResponseEntity<TransactionResponse> createTransaction(@RequestBody Transaction transaction) {
+    public ResponseEntity<?> createTransaction(@Valid @RequestBody Transaction transaction) {
+        if (transaction.getAmount() != null && transaction.getAmount() <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Số tiền phải lớn hơn 0"));
+        }
         // userId đã nằm trong object transaction gửi lên
         TransactionResponse response = transactionService.saveTransaction(transaction);
         return ResponseEntity.ok(response);
@@ -63,8 +67,12 @@ public class TransactionController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateTransaction(
             @PathVariable Long id,
-            @RequestBody Transaction transaction,
+            @Valid @RequestBody Transaction transaction,
             @RequestParam Long userId) {
+
+        if (transaction.getAmount() != null && transaction.getAmount() <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Số tiền phải lớn hơn 0"));
+        }
 
         // Kiểm tra giao dịch có tồn tại và thuộc về user không
         Optional<Transaction> existingOpt = transactionService.getTransactionById(id);
